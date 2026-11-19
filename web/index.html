@@ -3,14 +3,102 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#111215">
-  <title>FireRed</title>
+  <meta name="theme-color" content="#141111">
+  <meta name="description" content="Play Pokémon FireRed in your browser with native WebAssembly, remappable controls, and local saves.">
+  <title>FireRed WASM</title>
   <link rel="stylesheet" href="/web/style.css">
+  <link rel="stylesheet" href="/web/landing.css">
 </head>
 <body>
-  <main class="shell" data-touch="auto" data-scale="fit">
+  <div id="home" class="landing">
+    <header class="landing-header landing-wrap">
+      <a class="wordmark" href="#home"><span class="brand-mark" aria-hidden="true"></span>FireRed</a>
+      <nav class="landing-nav" aria-label="Project">
+        <a href="#controls">Controls</a>
+        <a href="https://github.com/Yumekaz/FireRedWasm">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+
+    <main class="landing-wrap">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="hero-kicker">Pokémon in the browser</p>
+          <h1 id="hero-title">Fire<span>Red</span></h1>
+          <p class="hero-description">Explore Kanto in the original Pokémon FireRed, running natively in your browser with WebAssembly.</p>
+          <a id="launch-game" class="launch-button" href="#play">
+            <span class="launch-icon" aria-hidden="true"></span>
+            <span id="launch-label">Play Game</span>
+          </a>
+        </div>
+
+        <figure class="preview-device">
+          <div class="preview-top" aria-hidden="true">
+            <span class="preview-led"></span>
+            <span class="preview-grille"></span>
+          </div>
+          <div class="preview-screen">
+            <div class="preview-idle" aria-hidden="true">
+              <span class="brand-mark preview-flame"></span>
+            </div>
+            <img id="preview-image" src="/screenshots/12_pallet_town_outside.png"
+              width="240" height="160" decoding="async"
+              alt="The player outside their house in Pallet Town" hidden>
+          </div>
+          <figcaption id="preview-caption" class="preview-footer" hidden>
+            <span>Pallet Town</span>
+            <span>Gameplay preview</span>
+          </figcaption>
+        </figure>
+      </section>
+
+      <ul class="feature-strip" aria-label="Game features">
+        <li>
+          <span class="feature-icon feature-chip" aria-hidden="true"></span>
+          <div><h2>Native WebAssembly</h2><p>Game code runs directly in the browser.</p></div>
+        </li>
+        <li>
+          <span class="feature-icon feature-keys" aria-hidden="true"></span>
+          <div><h2>Keyboard controls</h2><p>Choose a layout and remap the buttons.</p></div>
+        </li>
+        <li>
+          <span class="feature-icon feature-screen" aria-hidden="true">⛶</span>
+          <div><h2>Fullscreen</h2><p>Fill the screen with crisp 3:2 pixels.</p></div>
+        </li>
+        <li>
+          <span class="feature-icon feature-save" aria-hidden="true"></span>
+          <div><h2>Local saves</h2><p>Keep progress here or export a .sav file.</p></div>
+        </li>
+      </ul>
+
+      <section id="controls" class="landing-controls" aria-labelledby="controls-title" tabindex="-1">
+        <div>
+          <h2 id="controls-title">Controls</h2>
+          <p>Choose arrows or WASD in Settings, or remap the keys to suit you. Touch controls appear on supported devices.</p>
+        </div>
+        <dl class="controls-guide">
+          <div><dt>Move</dt><dd><kbd>Arrow keys</kbd></dd></div>
+          <div><dt>Start</dt><dd><kbd>Enter</kbd></dd></div>
+          <div><dt>A <span>Confirm</span></dt><dd><kbd>Z</kbd> <kbd>J</kbd></dd></div>
+          <div><dt>Select</dt><dd><kbd>Backspace</kbd> <kbd>Shift</kbd></dd></div>
+          <div><dt>B <span>Back</span></dt><dd><kbd>X</kbd> <kbd>K</kbd></dd></div>
+          <div><dt>Shoulders</dt><dd><kbd>Q</kbd> <kbd>E</kbd></dd></div>
+          <div><dt>Fullscreen</dt><dd><kbd>F</kbd></dd></div>
+        </dl>
+      </section>
+    </main>
+
+    <footer class="landing-footer landing-wrap">
+      <p>Unofficial browser port. Original game by Game Freak. Decompilation by <a href="https://github.com/pret/pokefirered">pret contributors</a>.</p>
+      <a href="https://github.com/Yumekaz/FireRedWasm">Project on GitHub <span aria-hidden="true">↗</span></a>
+    </footer>
+  </div>
+
+  <main id="play" class="shell" data-touch="auto" data-scale="fit" aria-label="FireRed player" hidden>
     <header class="masthead">
-      <h1 class="wordmark"><span class="brand-mark" aria-hidden="true"></span>FireRed</h1>
+      <div class="player-brand">
+        <a class="home-link" href="#home"><span aria-hidden="true">←</span> Home</a>
+        <h1 class="wordmark"><span class="brand-mark" aria-hidden="true"></span>FireRed</h1>
+      </div>
       <div class="toolbar" aria-label="Player controls">
         <button id="fullscreen" class="button" type="button" title="Fullscreen (F)">
           <span aria-hidden="true">⛶</span> <span id="fullscreen-label">Fullscreen</span>
@@ -25,7 +113,7 @@
       <section class="display-panel" aria-label="Game display">
         <div id="display" class="screen-stage">
           <canvas id="screen" width="240" height="160" tabindex="0" aria-label="Game screen"></canvas>
-          <div id="screen-state" class="screen-state">
+          <div id="screen-state" class="screen-state" data-state="loading">
             <div class="screen-message">
               <div class="state-mark" aria-hidden="true"></div>
               <h2 id="state-title">Loading game</h2>
@@ -145,6 +233,6 @@
       </div>
     </dialog>
   </main>
-  <script type="module" src="/web/app.js"></script>
+  <script type="module" src="/web/landing.js"></script>
 </body>
 </html>

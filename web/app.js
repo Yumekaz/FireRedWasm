@@ -102,6 +102,8 @@ let lastSavedFlashHash = 0;
 let lastSaveFlushTime = performance.now();
 let wasmModulePromise;
 let bootId = 0;
+let started = false;
+let nextFrame;
 let automationReady;
 let resolveAutomationReady;
 if (automate) {
@@ -787,6 +789,7 @@ function showGameError(error) {
   console.error(error);
   wasmModulePromise = undefined;
   showGameState('error', 'Game build unavailable', error?.message || 'The game could not start.');
+  if (!shell.hidden && document.activeElement === canvas) retry.focus({ preventScroll: true });
 }
 
 let feedbackTimer;
@@ -851,7 +854,7 @@ function dismissImport() {
 }
 settings.addEventListener('close', () => {
   dismissImport();
-  if (gameReady) canvas.focus({ preventScroll: true });
+  if (gameReady && !shell.hidden) canvas.focus({ preventScroll: true });
 });
 
 downloadSaveButton.addEventListener('click', () => {
@@ -900,7 +903,9 @@ function fpsStatus(displayFps, gameFps) {
 }
 
 async function boot(saveBytes) {
-  const thisBootId = ++bootId;
+  bootId++;
+  cancelAnimationFrame(nextFrame);
+  nextFrame = undefined;
   showGameState('loading', 'Loading game', saveBytes
     ? 'Restarting with the imported save.'
     : 'Connecting to the local WebAssembly build.');
@@ -932,15 +937,12 @@ async function boot(saveBytes) {
   statusText = `running — ${(bytes.byteLength / 1024 / 1024).toFixed(1)} MiB wasm (~59.73 FPS)`;
   showGameState('ready');
   statusEl.title = fpsStatus(0, 0);
-  if (!settings.open && (document.activeElement === document.body || document.activeElement === retry))
+  if (!shell.hidden && !settings.open && (document.activeElement === document.body || document.activeElement === retry))
     canvas.focus({ preventScroll: true });
   if (automate) {
     render();
     resolveAutomationReady();
-  } else {
-    lastTick = performance.now();
-    requestAnimationFrame((now) => tick(thisBootId, now));
-  }
+  } else syncGameView();
 }
 
 function updateFps(frameCount) {
@@ -1136,6 +1138,7 @@ function runFramesForTick(elapsedMs) {
 }
 
 function tick(thisBootId, now) {
+  nextFrame = undefined;
   if (thisBootId !== bootId) return;
   try {
     const elapsedMs = Math.min(now - lastTick, 100);
@@ -1143,10 +1146,29 @@ function tick(thisBootId, now) {
     const frames = runFramesForTick(elapsedMs);
     render();
     updateFps(frames);
-    requestAnimationFrame((nextNow) => tick(thisBootId, nextNow));
+    nextFrame = requestAnimationFrame((nextNow) => tick(thisBootId, nextNow));
   } catch (error) {
     showGameError(error);
   }
 }
 
-boot().catch(showGameError);
+export function syncGameView() {
+  if (shell.hidden) {
+    input.clear();
+    cancelAnimationFrame(nextFrame);
+    nextFrame = undefined;
+    return;
+  }
+
+  if (!started) {
+    started = true;
+    boot().catch(showGameError);
+    return;
+  }
+
+  if (!automate && gameReady && nextFrame === undefined) {
+    lastTick = performance.now();
+    const thisBootId = bootId;
+    nextFrame = requestAnimationFrame((now) => tick(thisBootId, now));
+  }
+}
