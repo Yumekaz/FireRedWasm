@@ -44,6 +44,9 @@ def load_script_command_constants() -> Dict[str, int]:
     constants["SCR_OP_GOTO_STD"] = constants.get("SCR_OP_GOTOSTD", 0x08)
     constants["SCR_OP_CALL_STD_IF"] = constants.get("SCR_OP_CALLSTD_IF", 0x0B)
     constants["SCR_OP_GOTO_STD_IF"] = constants.get("SCR_OP_GOTOSTD_IF", 0x0A)
+    constants["STR_VAR_1"] = 0
+    constants["STR_VAR_2"] = 1
+    constants["STR_VAR_3"] = 2
     return constants
 
 
@@ -549,6 +552,13 @@ def eval_macro_condition(expr: str, constants: Dict[str, int]) -> bool:
     try:
         return bool(eval(expr, {"__builtins__": {}}, {}))
     except Exception:
+        parts = re.split(r"\s*(==|!=)\s*", expr.strip())
+        if len(parts) == 3:
+            lhs, op, rhs = parts
+            if op == "==":
+                return lhs == rhs
+            elif op == "!=":
+                return lhs != rhs
         return False
 
 
@@ -1323,6 +1333,20 @@ def convert(text: str, source: Optional[Path] = None, emit_sizes: bool = True) -
         stripped = line.strip()
         if stripped.startswith("#"):
             continue
+        if current_macro_name is not None:
+            if stripped.startswith(".macro "):
+                macro_depth += 1
+                current_macro_body.append(stripped)
+            elif stripped == ".endm":
+                macro_depth -= 1
+                if macro_depth == 0:
+                    macros[current_macro_name] = AsmMacro(current_macro_params, current_macro_body)
+                    current_macro_name = None
+                else:
+                    current_macro_body.append(stripped)
+            else:
+                current_macro_body.append(stripped)
+            continue
         if stripped.startswith(".if "):
             expr = stripped[len(".if "):].strip()
             try:
@@ -1343,20 +1367,6 @@ def convert(text: str, source: Optional[Path] = None, emit_sizes: bool = True) -
                 conditional_stack.pop()
             continue
         if conditional_stack and not all(conditional_stack):
-            continue
-        if current_macro_name is not None:
-            if stripped.startswith(".macro "):
-                macro_depth += 1
-                current_macro_body.append(stripped)
-            elif stripped == ".endm":
-                macro_depth -= 1
-                if macro_depth == 0:
-                    macros[current_macro_name] = AsmMacro(current_macro_params, current_macro_body)
-                    current_macro_name = None
-                else:
-                    current_macro_body.append(stripped)
-            else:
-                current_macro_body.append(stripped)
             continue
         if stripped.startswith(".macro "):
             signature = stripped[len(".macro "):].strip()

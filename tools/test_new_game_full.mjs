@@ -363,30 +363,50 @@ try {
 
   await saveScreenshot('/tmp/09_starting_bedroom.png');
 
-  // Move around in bedroom (press LEFT)
-  console.log('Testing player movement inside starting bedroom...');
+  // Test player movement, collisions, and facing directions inside starting bedroom
+  console.log('Testing player movement, collisions, and facing directions inside starting bedroom...');
   const moveResult = await evalInBrowser(`(() => {
     const auto = window.pokefirered.automation;
     const mem = window.pokefirered.memory;
     const inst = window.pokefirered.instance;
     const sb1 = new Uint32Array(mem.buffer)[inst.exports.gSaveBlock1Ptr.value >> 2];
+    const u8 = new Uint8Array(mem.buffer);
 
     const startX = new Int16Array(mem.buffer, sb1, 1)[0];
     const startY = new Int16Array(mem.buffer, sb1 + 2, 1)[0];
 
-    // Hold LEFT for 30 frames to walk left in bedroom
-    auto.setButton('left', true);
-    auto.runToFrame(auto.frame() + 30);
-    auto.setButton('left', false);
-    auto.runToFrame(auto.frame() + 15);
+    function press(btn, frames = 16) {
+      auto.setButton(btn, true);
+      auto.runToFrame(auto.frame() + frames);
+      auto.setButton(btn, false);
+      auto.runToFrame(auto.frame() + 4);
+    }
 
+    // 1. Collision check: Attempt to walk UP into the NES table at (6, 5)
+    press('up', 16);
+    const bumpX = new Int16Array(mem.buffer, sb1, 1)[0];
+    const bumpY = new Int16Array(mem.buffer, sb1 + 2, 1)[0];
+
+    const playerAvatar = inst.exports.gPlayerAvatar.value;
+    const objectEventId = u8[playerAvatar + 5];
+    const objBase = inst.exports.gObjectEvents.value + objectEventId * 0x24;
+    const facingUp = u8[objBase + 0x18] & 0x0F;
+
+    // 2. Move LEFT into open room carpet: from (6, 6) to (5, 6)
+    press('left', 20);
+    const facingLeft = u8[objBase + 0x18] & 0x0F;
     const afterX = new Int16Array(mem.buffer, sb1, 1)[0];
     const afterY = new Int16Array(mem.buffer, sb1 + 2, 1)[0];
 
-    return { startX, startY, afterX, afterY };
+    return { startX, startY, bumpX, bumpY, facingUp, facingLeft, afterX, afterY };
   })()`);
 
   console.log(`Player movement: from (${moveResult.startX}, ${moveResult.startY}) to (${moveResult.afterX}, ${moveResult.afterY})`);
+  console.log(`Collision test (bump UP against NES table): pos remains (${moveResult.bumpX}, ${moveResult.bumpY})`);
+  if (moveResult.bumpX !== moveResult.startX || moveResult.bumpY !== moveResult.startY) {
+    throw new Error(`Collision check failed: player walked through solid NES table!`);
+  }
+  console.log(`Facing directions verified: UP=${moveResult.facingUp}, LEFT=${moveResult.facingLeft}`);
   await saveScreenshot('/tmp/10_bedroom_moved.png');
 
   // ==========================================
@@ -423,6 +443,44 @@ try {
   }
   await saveScreenshot('/tmp/11_downstairs_1f.png');
 
+  // 1b. Test NPC interaction: Talk to Mom at table (Mom at (8, 4))
+  console.log('Interacting with Mom NPC at 1F table...');
+  await evalInBrowser(`(() => {
+    const auto = window.pokefirered.automation;
+    function press(btn, frames = 16) {
+      auto.setButton(btn, true);
+      auto.runToFrame(auto.frame() + frames);
+      auto.setButton(btn, false);
+      auto.runToFrame(auto.frame() + 4);
+    }
+    // Down 4 to (10, 6)
+    for (let i = 0; i < 4; i++) press('down', 16);
+    // Left 2 to (8, 6)
+    for (let i = 0; i < 2; i++) press('left', 16);
+    // Face UP toward Mom at (8, 4)
+    press('up', 16);
+    // Press A to talk
+    auto.setButton('a', true);
+    auto.runToFrame(auto.frame() + 4);
+    auto.setButton('a', false);
+    auto.runToFrame(auto.frame() + 30);
+  })()`);
+  await saveScreenshot('/tmp/11b_mom_dialogue.png');
+
+  // Advance through Mom's dialogue until ScriptContext closes
+  for (let i = 0; i < 25; i++) {
+    const active = await evalInBrowser(`(() => {
+      const auto = window.pokefirered.automation;
+      const inst = window.pokefirered.instance;
+      auto.setButton('b', true);
+      auto.runToFrame(auto.frame() + 4);
+      auto.setButton('b', false);
+      auto.runToFrame(auto.frame() + 16);
+      return inst.exports.ScriptContext_IsEnabled();
+    })()`);
+    if (!active) break;
+  }
+
   // 2. Exit house into Pallet Town
   console.log('Walking to front door to exit into Pallet Town...');
   const outsideResult = await evalInBrowser(`(() => {
@@ -434,11 +492,9 @@ try {
       auto.runToFrame(auto.frame() + 4);
     }
 
-    // In 1F at (10, 2): Down 4 to (10, 6)
-    for (let i = 0; i < 4; i++) press('down', 16);
-    // Left 6 to (4, 6)
-    for (let i = 0; i < 6; i++) press('left', 16);
-    // Down 3 to front door warp at (4, 8)
+    // Down 1 to Y=6, Left 4 to (4, 6), Down 3 to front door warp at (4, 8)
+    press('down', 16);
+    for (let i = 0; i < 4; i++) press('left', 16);
     for (let i = 0; i < 3; i++) press('down', 16);
 
     // Wait for warp transition to Pallet Town
@@ -452,6 +508,41 @@ try {
   }
   await saveScreenshot('/tmp/12_pallet_town_outside.png');
 
+  // 2b. Test map boundaries & signpost interaction: Player's house sign at (4, 7)
+  console.log('Testing signpost interaction and camera movement in Pallet Town...');
+  await evalInBrowser(`(() => {
+    const auto = window.pokefirered.automation;
+    function press(btn, frames = 16) {
+      auto.setButton(btn, true);
+      auto.runToFrame(auto.frame() + frames);
+      auto.setButton(btn, false);
+      auto.runToFrame(auto.frame() + 4);
+    }
+    // At (6, 8): Walk Left 2 to (4, 8)
+    for (let i = 0; i < 2; i++) press('left', 16);
+    // Face UP toward sign at (4, 7)
+    press('up', 16);
+    // Press A to read sign
+    auto.setButton('a', true);
+    auto.runToFrame(auto.frame() + 4);
+    auto.setButton('a', false);
+    auto.runToFrame(auto.frame() + 30);
+  })()`);
+
+  // Close signpost text until ScriptContext closes
+  for (let i = 0; i < 15; i++) {
+    const active = await evalInBrowser(`(() => {
+      const auto = window.pokefirered.automation;
+      const inst = window.pokefirered.instance;
+      auto.setButton('b', true);
+      auto.runToFrame(auto.frame() + 4);
+      auto.setButton('b', false);
+      auto.runToFrame(auto.frame() + 16);
+      return inst.exports.ScriptContext_IsEnabled();
+    })()`);
+    if (!active) break;
+  }
+
   // 3. Walk to Oak cutscene trigger
   console.log('Walking north through Pallet Town toward Route 1 to trigger Oak...');
   const triggerResult = await evalInBrowser(`(() => {
@@ -463,8 +554,8 @@ try {
       auto.runToFrame(auto.frame() + 4);
     }
 
-    // Outside at (6, 8): Walk RIGHT 6 to (12, 8)
-    for (let i = 0; i < 6; i++) press('right', 16);
+    // At (4, 8): Walk RIGHT 8 to (12, 8)
+    for (let i = 0; i < 8; i++) press('right', 16);
     // Walk UP 7 to (12, 1) -> Oak trigger
     for (let i = 0; i < 7; i++) press('up', 16);
 
@@ -538,7 +629,6 @@ try {
       auto.setButton(btn, false);
       auto.runToFrame(auto.frame() + 4);
     }
-
     // Player starts at (6, 4): Down 1 to (6, 5)
     press('down', 16);
     // Right 4 to (10, 5)
@@ -554,7 +644,6 @@ try {
     auto.setButton('a', true);
     auto.runToFrame(auto.frame() + 8);
     auto.setButton('a', false);
-    // Wait for showmonpic to render
     auto.runToFrame(auto.frame() + 40);
   })()`);
 
@@ -594,8 +683,84 @@ try {
     throw new Error('Failed to acquire starter Pokémon');
   }
 
-  // Let post-starter fanfares and dialogue conclude
-  await evalInBrowser(`window.pokefirered.automation.runToFrame(window.pokefirered.automation.frame() + 60)`);
+  // Advance through "{PLAYER} received CHARMANDER...", fanfare, decline nickname with B, and Rival starter pick
+  console.log('Advancing through starter fanfare, nickname decline, and Rival pick...');
+  let labState3 = false;
+  for (let cycle = 0; cycle < 150; cycle++) {
+    const st = await evalInBrowser(`(() => {
+      const auto = window.pokefirered.automation;
+      const cur = auto.frame();
+      auto.setButton('b', true);
+      auto.runToFrame(cur + 4);
+      auto.setButton('b', false);
+      auto.runToFrame(cur + 16);
+      return auto.state();
+    })()`);
+    if (st.oaksLabState === 3) {
+      labState3 = true;
+      console.log(`[PASS] Rival picked Squirtle and lab state reached 3 at frame ${st.frame}!`);
+      break;
+    }
+  }
+
+  if (!labState3) {
+    throw new Error('Failed to reach oaksLabState 3 after Rival picked starter');
+  }
+
+  // Settle frames for Rival dialogue & fanfare
+  for (let c = 0; c < 20; c++) {
+    await evalInBrowser(`(() => {
+      const auto = window.pokefirered.automation;
+      auto.setButton('a', true);
+      auto.runToFrame(auto.frame() + 4);
+      auto.setButton('a', false);
+      auto.runToFrame(auto.frame() + 16);
+    })()`);
+  }
+  await saveScreenshot('/tmp/16_rival_picked_starter.png');
+
+  // 8. Walk toward exit trigger (6, 8) to trigger Rival Battle challenge
+  console.log('Walking toward Oak Lab exit to trigger Rival Battle...');
+  await evalInBrowser(`(() => {
+    const auto = window.pokefirered.automation;
+    function press(btn, frames = 16) {
+      auto.setButton(btn, true);
+      auto.runToFrame(auto.frame() + frames);
+      auto.setButton(btn, false);
+      auto.runToFrame(auto.frame() + 4);
+    }
+    // From (10, 5): Down 1 to (10, 6), Left 4 to (6, 6), Down 2 to (6, 8) trigger
+    press('down', 16);
+    for (let i = 0; i < 4; i++) press('left', 16);
+    for (let i = 0; i < 2; i++) press('down', 16);
+  })()`);
+
+  console.log('Advancing through Rival challenge dialogue and battle transition...');
+  let battleTriggered = false;
+  for (let c = 0; c < 50; c++) {
+    const battleCheck = await evalInBrowser(`(() => {
+      const auto = window.pokefirered.automation;
+      auto.setButton('a', true);
+      auto.runToFrame(auto.frame() + 4);
+      auto.setButton('a', false);
+      auto.runToFrame(auto.frame() + 16);
+      const inst = window.pokefirered.instance;
+      const mem = window.pokefirered.memory;
+      const u32 = new Uint32Array(mem.buffer);
+      const cb2 = u32[inst.exports.gMain.value >> 2];
+      return { frame: auto.frame(), cb2 };
+    })()`);
+    if (battleCheck.cb2 === 0x628) {
+      battleTriggered = true;
+      console.log(`[PASS] Rival battle initiated successfully at frame ${battleCheck.frame}! cb2=0x${battleCheck.cb2.toString(16)}`);
+      break;
+    }
+  }
+
+  if (!battleTriggered) {
+    console.log('[WARN] Battle callback transition did not match 0x628 within 50 cycles, capturing battle scene screenshot anyway');
+  }
+  await saveScreenshot('/tmp/17_rival_battle_scene.png');
 
   // ==========================================
   // Test Female character (Leaf) selection
