@@ -774,8 +774,6 @@ def expand_macro(
         return [f".functype {function} (i32) -> (i32)", f".4byte {function}"]
 
     if stripped.startswith("def_special "):
-        if not constants.get("ALLOCATE_SPECIAL_TABLE", 0):
-            return []
         special = split_args(stripped[len("def_special "):])[0]
         counters.setdefault("special_wrappers", []).append((special, bool(constants.get(f"SPECIAL_RETURNS_VALUE_{special}", 1))))
         wrapper = f"WasmSpecial_{special}"

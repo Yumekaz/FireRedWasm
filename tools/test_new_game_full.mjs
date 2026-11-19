@@ -390,6 +390,214 @@ try {
   await saveScreenshot('/tmp/10_bedroom_moved.png');
 
   // ==========================================
+  // Overworld Gameplay: Downstairs -> Pallet Town -> Oak Cutscene -> Oak's Lab -> Starter Selection
+  // ==========================================
+  console.log('\n--- Overworld Gameplay Flow ---');
+
+  // 1. Walk downstairs to 1F
+  console.log('Walking to stairs to descend to 1F...');
+  const downstairsResult = await evalInBrowser(`(() => {
+    const auto = window.pokefirered.automation;
+    function press(btn, frames = 16) {
+      auto.setButton(btn, true);
+      auto.runToFrame(auto.frame() + frames);
+      auto.setButton(btn, false);
+      auto.runToFrame(auto.frame() + 4);
+    }
+
+    // From (5, 6): Walk RIGHT 6 to (11, 6)
+    for (let i = 0; i < 6; i++) press('right', 16);
+    // Walk UP 4 to (11, 2)
+    for (let i = 0; i < 4; i++) press('up', 16);
+    // Walk LEFT into stairs at (10, 2)
+    press('left', 24);
+
+    // Wait for warp transition into 1F
+    auto.runToFrame(auto.frame() + 100);
+    return auto.state();
+  })()`);
+
+  console.log(`Downstairs reached: map=(${downstairsResult.mapGroup}, ${downstairsResult.mapNum}), pos=(${downstairsResult.x}, ${downstairsResult.y})`);
+  if (downstairsResult.mapGroup !== 4 || downstairsResult.mapNum !== 0) {
+    throw new Error(`Failed to descend to 1F: map=(${downstairsResult.mapGroup}, ${downstairsResult.mapNum})`);
+  }
+  await saveScreenshot('/tmp/11_downstairs_1f.png');
+
+  // 2. Exit house into Pallet Town
+  console.log('Walking to front door to exit into Pallet Town...');
+  const outsideResult = await evalInBrowser(`(() => {
+    const auto = window.pokefirered.automation;
+    function press(btn, frames = 16) {
+      auto.setButton(btn, true);
+      auto.runToFrame(auto.frame() + frames);
+      auto.setButton(btn, false);
+      auto.runToFrame(auto.frame() + 4);
+    }
+
+    // In 1F at (10, 2): Down 4 to (10, 6)
+    for (let i = 0; i < 4; i++) press('down', 16);
+    // Left 6 to (4, 6)
+    for (let i = 0; i < 6; i++) press('left', 16);
+    // Down 3 to front door warp at (4, 8)
+    for (let i = 0; i < 3; i++) press('down', 16);
+
+    // Wait for warp transition to Pallet Town
+    auto.runToFrame(auto.frame() + 100);
+    return auto.state();
+  })()`);
+
+  console.log(`Pallet Town reached: map=(${outsideResult.mapGroup}, ${outsideResult.mapNum}), pos=(${outsideResult.x}, ${outsideResult.y})`);
+  if (outsideResult.mapGroup !== 3 || outsideResult.mapNum !== 0) {
+    throw new Error(`Failed to exit to Pallet Town: map=(${outsideResult.mapGroup}, ${outsideResult.mapNum})`);
+  }
+  await saveScreenshot('/tmp/12_pallet_town_outside.png');
+
+  // 3. Walk to Oak cutscene trigger
+  console.log('Walking north through Pallet Town toward Route 1 to trigger Oak...');
+  const triggerResult = await evalInBrowser(`(() => {
+    const auto = window.pokefirered.automation;
+    function press(btn, frames = 16) {
+      auto.setButton(btn, true);
+      auto.runToFrame(auto.frame() + frames);
+      auto.setButton(btn, false);
+      auto.runToFrame(auto.frame() + 4);
+    }
+
+    // Outside at (6, 8): Walk RIGHT 6 to (12, 8)
+    for (let i = 0; i < 6; i++) press('right', 16);
+    // Walk UP 7 to (12, 1) -> Oak trigger
+    for (let i = 0; i < 7; i++) press('up', 16);
+
+    return auto.state();
+  })()`);
+
+  console.log(`Reached trigger tile: pos=(${triggerResult.x}, ${triggerResult.y})`);
+  // Let Oak exclamation mark and approach animate
+  await evalInBrowser(`window.pokefirered.automation.runToFrame(window.pokefirered.automation.frame() + 50)`);
+  await saveScreenshot('/tmp/13_oak_trigger.png');
+
+  // 4. Follow Oak to Oak's Lab
+  console.log('Advancing through cutscene and following Oak into his Lab...');
+  let labReached = false;
+  for (let cycle = 0; cycle < 120; cycle++) {
+    const st = await evalInBrowser(`(() => {
+      const auto = window.pokefirered.automation;
+      auto.setButton('a', true);
+      auto.runToFrame(auto.frame() + 4);
+      auto.setButton('a', false);
+      auto.runToFrame(auto.frame() + 10);
+      return auto.state();
+    })()`);
+    if (st.mapGroup === 4 && st.mapNum === 3) {
+      labReached = true;
+      console.log(`[PASS] Entered Oak's Lab at frame ${st.frame}! pos=(${st.x}, ${st.y})`);
+      break;
+    }
+  }
+
+  if (!labReached) {
+    throw new Error("Failed to enter Oak's Lab during cutscene");
+  }
+  // Wait a few frames for map load and Oak to walk in
+  await evalInBrowser(`window.pokefirered.automation.runToFrame(window.pokefirered.automation.frame() + 30)`);
+  await saveScreenshot('/tmp/14_oaks_lab_interior.png');
+
+  // 5. Advance through Oak's starter speech inside Lab
+  console.log("Advancing dialogue through Oak's starter presentation...");
+  let speechFinished = false;
+  for (let cycle = 0; cycle < 400; cycle++) {
+    const st = await evalInBrowser(`(() => {
+      const auto = window.pokefirered.automation;
+      auto.setButton('a', true);
+      auto.runToFrame(auto.frame() + 4);
+      auto.setButton('a', false);
+      auto.runToFrame(auto.frame() + 12);
+      return auto.state();
+    })()`);
+    if (st.oaksLabState === 2) {
+      speechFinished = true;
+      console.log(`[PASS] Oak starter presentation complete! oaksLabState=${st.oaksLabState} at frame ${st.frame}`);
+      break;
+    }
+  }
+
+  if (!speechFinished) {
+    throw new Error("Failed to complete Oak's starter presentation");
+  }
+
+  // Settle 30 frames for free player movement
+  await evalInBrowser(`window.pokefirered.automation.runToFrame(window.pokefirered.automation.frame() + 30)`);
+
+  // 6. Walk to Charmander's Poké Ball and choose it
+  console.log("Walking to Charmander's Poké Ball...");
+  await evalInBrowser(`(() => {
+    const auto = window.pokefirered.automation;
+    function press(btn, frames = 16) {
+      auto.setButton(btn, true);
+      auto.runToFrame(auto.frame() + frames);
+      auto.setButton(btn, false);
+      auto.runToFrame(auto.frame() + 4);
+    }
+
+    // Player starts at (6, 4): Down 1 to (6, 5)
+    press('down', 16);
+    // Right 4 to (10, 5)
+    for (let i = 0; i < 4; i++) press('right', 16);
+    // Face UP toward Charmander ball at (10, 4)
+    press('up', 16);
+  })()`);
+
+  // Press A to inspect Charmander ball
+  console.log('Inspecting Charmander Poké Ball...');
+  await evalInBrowser(`(() => {
+    const auto = window.pokefirered.automation;
+    auto.setButton('a', true);
+    auto.runToFrame(auto.frame() + 8);
+    auto.setButton('a', false);
+    // Wait for showmonpic to render
+    auto.runToFrame(auto.frame() + 40);
+  })()`);
+
+  await saveScreenshot('/tmp/15_starter_selection_charmander.png');
+
+  // Confirm YES to choose Charmander
+  console.log('Confirming YES to receive Charmander...');
+  let starterAcquired = false;
+  for (let cycle = 0; cycle < 100; cycle++) {
+    const result = await evalInBrowser(`(() => {
+      const auto = window.pokefirered.automation;
+      auto.setButton('a', true);
+      auto.runToFrame(auto.frame() + 4);
+      auto.setButton('a', false);
+      auto.runToFrame(auto.frame() + 10);
+
+      const inst = window.pokefirered.instance;
+      const count = inst.exports.CalculatePlayerPartyCount();
+      let species = 0;
+      if (count > 0) {
+        species = inst.exports.GetMonData2(inst.exports.gPlayerParty.value, 11);
+      }
+      return { count, species, frame: auto.frame() };
+    })()`);
+
+    if (result.count > 0) {
+      starterAcquired = true;
+      console.log(`[PASS] Acquired starter Pokémon at frame ${result.frame}! Party count: ${result.count}, Species: ${result.species} (4=Charmander)`);
+      if (result.species !== 4) {
+        throw new Error(`Expected Charmander (species 4), got species ${result.species}`);
+      }
+      break;
+    }
+  }
+
+  if (!starterAcquired) {
+    throw new Error('Failed to acquire starter Pokémon');
+  }
+
+  // Let post-starter fanfares and dialogue conclude
+  await evalInBrowser(`window.pokefirered.automation.runToFrame(window.pokefirered.automation.frame() + 60)`);
+
+  // ==========================================
   // Test Female character (Leaf) selection
   // ==========================================
   console.log('\n--- Testing Female Character (Leaf) Selection Flow ---');

@@ -212,6 +212,9 @@ WASM_DATA_ASM_SRCS := \
 	$(DATA_ASM_SUBDIR)/maps.s \
 	$(DATA_ASM_SUBDIR)/map_events.s \
 	$(DATA_ASM_SUBDIR)/event_scripts.s \
+	$(DATA_ASM_SUBDIR)/field_effect_scripts.s \
+	$(DATA_ASM_SUBDIR)/mystery_event_msg.s \
+	$(DATA_ASM_SUBDIR)/mystery_event_script_cmd_table.s \
 	$(DATA_ASM_SUBDIR)/battle_scripts_1.s \
 	$(DATA_ASM_SUBDIR)/battle_scripts_2.s \
 	$(DATA_ASM_SUBDIR)/battle_ai_scripts.s \
