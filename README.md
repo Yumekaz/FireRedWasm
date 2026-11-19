@@ -36,9 +36,9 @@ Open [localhost:8000](http://localhost:8000/) and select **Play Game**. You can 
 
 ## Deploying to Vercel
 
-Import this repository into Vercel with the repository root as the project root. The checked-in `vercel.json` selects **Other** and packages the frontend into `build/vercel-site`. The deployment build needs no game toolchain, dependencies, or environment variables.
+Import this repository into Vercel with the repository root as the project root. The checked-in `vercel.json` selects **Other** and packages the frontend and bundled game module into `build/vercel-site`. The deployment build needs no game toolchain, dependencies, or environment variables.
 
-On the deployed site, choose **Play Game**, then open your local `build/wasm/pokefirered.wasm` with **Choose WASM file**. The browser reads that file on your device. The deployment contains the frontend files only. If you already play on localhost, export your `.sav` there and import it on the deployed site to transfer your progress.
+On the deployed site, choose **Play Game** to start. If you already play on localhost, export your `.sav` there and import it on the deployed site to transfer your progress.
 
 Run `node tools/build_vercel.mjs` to prepare the same static output locally.
 
