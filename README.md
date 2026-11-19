@@ -1,0 +1,87 @@
+# Pokémon FireRed - Native WebAssembly Port
+
+This repository contains the native WebAssembly (WASM) port of Pokémon FireRed Version (English Rev 1 / 1.1), compiling the decompiled C source code from `pret/pokefirered` directly into WebAssembly instructions using LLVM Clang and `wasm-ld`.
+
+## Architecture Overview
+
+Unlike traditional web emulators (e.g., mGBA or VBA-M compiled to WASM) which emulate an ARM7TDMI processor and execute a ROM file, this project:
+1. **Compiles C to WASM**: Compiles over 280 native C source files (`src/*.c`) directly into 32-bit WebAssembly object code (`wasm32-unknown-unknown`).
+2. **Translates Script & Map Data**: Translates GBA assembly data tables (`data/scripts/*.s`, `data/maps/*.s`) into relocatable WebAssembly data sections via `tools/wasm_asm_data.py`.
+3. **Hardware Emulation in C**:
+   - **Display / PPU (`src/wasm_display.c`)**: Decodes GBA Mode 0/Mode 1 tilemap layers, 8bpp affine background transformations, and 128 hardware OAM sprites into an authentic 240×160 32-bit RGBA framebuffer.
+   - **GPU Registers (`src/gpu_regs.c`)**: Implements GBA hardware reset defaults (including identity affine scaling matrices `0x0100` for `BG2PA`/`BG2PD` and `BG3PA`/`BG3PD`).
+   - **Flash Memory (`src/agb_flash.c`, `src/agb_flash_1m.c`)**: Simulates 128 KB Flash chip I/O with authentic FireRed 14-sector allocation, checksum calculation, and signature verification (`0x08012025`).
+   - **Heap Memory (`src/main.c`)**: Dedicated 112 KB EWRAM buffer (`gHeap[HEAP_SIZE]`) preventing low-memory corruption during dynamic allocations.
+   - **Audio Engine (`src/m4a.c`)**: Stepped via track and duration timers to satisfy game state machine progression.
+4. **Browser Frontend (`web/`)**:
+   - `web/index.html` & `web/style.css`: Responsive, pixel-perfect 240×160 canvas scaling.
+   - `web/app.js`: High-precision frame scheduling targeting ~59.7275 Hz via `requestAnimationFrame`, keyboard/touch layout mapping, and `.sav` import/export.
+   - `web/server.mjs`: Lightweight HTTP server with proper MIME types.
+
+## Prerequisites
+
+- **Clang** with `wasm32-unknown-unknown` target support (LLVM 15+)
+- **wasm-ld** (LLVM WebAssembly linker)
+- **GNU Make**
+- **Python 3**
+- **Node.js** (v18+ or v20+)
+- **Google Chrome / Chromium** (optional, for automated headless browser tests)
+
+## Build Instructions
+
+1. **Extract ROM Assets**:
+   Place an authentic English Pokémon FireRed ROM in the root directory named `baserom.gba` (SHA-1: `dd5945db9b930750cb39d00c84da8571feebf417`).
+
+2. **Compile to WebAssembly**:
+   ```bash
+   make wasm
+   ```
+   This compiles all C modules, translates script assemblies, and links the final binary to `build/wasm/pokefirered.wasm`.
+
+3. **Clean Build**:
+   ```bash
+   make clean-wasm
+   ```
+
+## Running the Browser Frontend
+
+Start the local web server:
+```bash
+node web/server.mjs
+```
+Open [http://localhost:8000](http://localhost:8000) in any modern browser.
+
+### Controls:
+- **D-Pad**: Arrow keys or `W` / `A` / `S` / `D`
+- **A Button**: `Z` or `J`
+- **B Button**: `X` or `K`
+- **Start**: `Enter`
+- **Select**: `Backspace` or `Shift`
+- **L / R Bumpers**: `A` / `S` (or `Q` / `E` in WASD mode)
+
+## Automated Tests
+
+1. **Unit & Regression Test Suite**:
+   ```bash
+   node tools/test_wasm.mjs
+   ```
+   Verifies:
+   - `AgbMain` intro sequence execution and active framebuffer rendering
+   - `NewGameInitData` memory safety and `DefaultFlash` structure integrity
+   - 14-sector Flash save creation and sector checksum validity
+   - Save reload roundtrip and memory restoration
+   - Overworld map initialization and player movement
+   - Battle engine initialization (`CB2_InitBattle`) and combat frame advancement
+   - Mode 1 BG2 affine background identity scale reset defaults (`0x0100`)
+
+2. **Headless Chromium Browser Verification**:
+   ```bash
+   node --experimental-websocket tools/test_chromium.mjs
+   ```
+   Validates WebAssembly boot in Chrome, Title Screen display, and pressing Start to enter menus.
+
+3. **Full New Game Flow Verification**:
+   ```bash
+   node --experimental-websocket tools/test_new_game_full.mjs
+   ```
+   Automates Oak's speech, character selection (Red / Leaf), naming, rival introduction, and entering the Pallet Town player bedroom.

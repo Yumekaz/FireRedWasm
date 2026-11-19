@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>pokefirered-wasm</title>
+  <link rel="stylesheet" href="/web/style.css" />
+</head>
+<body>
+  <main class="shell" aria-label="pokefirered-wasm emulator">
+    <header class="masthead">
+      <h1>pokefirered-wasm</h1>
+    </header>
+
+    <section class="display-panel" aria-label="Game display">
+      <canvas id="screen" width="240" height="160" aria-label="Game screen"></canvas>
+    </section>
+
+    <div class="status" id="status">loading wasm…</div>
+
+    <section class="controls" aria-label="Controls">
+      <div class="dpad" aria-label="Directional pad">
+        <button data-key="up" aria-label="Up">↑</button>
+        <button data-key="left" aria-label="Left">←</button>
+        <button data-key="right" aria-label="Right">→</button>
+        <button data-key="down" aria-label="Down">↓</button>
+      </div>
+
+      <div class="face" aria-label="Action buttons">
+        <button data-key="l">L</button>
+        <button data-key="r">R</button>
+        <button data-key="b">B</button>
+        <button data-key="a">A</button>
+        <button data-key="select">SELECT</button>
+        <button data-key="start">START</button>
+      </div>
+
+      <div class="speed-control" aria-label="Speed controls">
+        <div class="speed-heading">Speed <output id="speed-value">1x</output></div>
+        <div class="speed-buttons">
+          <button type="button" data-speed="0.5">0.5x</button>
+          <button type="button" data-speed="2">2x</button>
+          <button type="button" data-speed="1">Reset</button>
+          <button type="button" data-speed="unlimited">Unlimited</button>
+        </div>
+      </div>
+
+      <div class="utility-controls" aria-label="Save and display controls">
+        <button id="layout-toggle" type="button">Layout: Arrows</button>
+        <button id="download-save" type="button">Download .sav</button>
+        <label class="upload-save" for="upload-save">Upload .sav</label>
+        <button id="fullscreen" type="button">Big Picture</button>
+        <input id="upload-save" type="file" accept=".sav,.srm,application/octet-stream" />
+      </div>
+    </section>
+
+    <p class="keys">Keyboard: Arrows/WASD=D-Pad, Z/J=A, X/K=B, Enter=Start, Backspace/Shift=Select, A/S or Q/E=L/R.</p>
+  </main>
+  <script type="module" src="/web/app.js"></script>
+</body>
+</html>
