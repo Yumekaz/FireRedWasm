@@ -47,6 +47,7 @@ const SAVE_FLUSH_INTERVAL_MS = 1000;
 const searchParams = new URLSearchParams(location.search);
 const speedParam = searchParams.get('speed');
 const automate = searchParams.get('automate') === '1';
+export const handheld = matchMedia('(pointer: coarse) and (hover: none)');
 const MIN_SPEED = 0.1;
 const MAX_SPEED = 1000;
 const FAST_FRAME_BUDGET_MS = 16;
@@ -534,12 +535,28 @@ function updateFullscreenButton() {
   fullscreenButton.title = active ? 'Exit fullscreen (F)' : 'Fullscreen (F)';
 }
 
-async function toggleFullscreen() {
+export async function toggleFullscreen({ quiet = false } = {}) {
   try {
-    if (document.fullscreenElement === shell) await document.exitFullscreen();
-    else await shell.requestFullscreen();
-    if (gameReady && !settings.open) canvas.focus({ preventScroll: true });
+    if (document.fullscreenElement === shell) {
+      await document.exitFullscreen();
+    } else {
+      await shell.requestFullscreen();
+      if (document.fullscreenElement !== shell) return;
+      if (shell.hidden) {
+        await document.exitFullscreen();
+        return;
+      }
+      if (handheld.matches) {
+        try {
+          await screen.orientation?.lock?.('landscape');
+        } catch {
+          // Keep the player usable when the browser only supports manual rotation.
+        }
+      }
+    }
+    if (gameReady && !shell.hidden && !settings.open) canvas.focus({ preventScroll: true });
   } catch (error) {
+    if (quiet) return;
     console.warn(error);
     showPlayerFeedback('Fullscreen is unavailable in this browser or window.');
   }
@@ -832,7 +849,7 @@ function updateIntegerScale() {
 new ResizeObserver(updateIntegerScale).observe(document.querySelector('#display'));
 window.addEventListener('resize', updateIntegerScale);
 
-fullscreenButton.addEventListener('click', toggleFullscreen);
+fullscreenButton.addEventListener('click', () => toggleFullscreen());
 document.addEventListener('fullscreenchange', () => {
   input.clear();
   updateFullscreenButton();

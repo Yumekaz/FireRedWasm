@@ -1,4 +1,4 @@
-import { syncGameView } from './app.js';
+import { handheld, syncGameView, toggleFullscreen } from './app.js';
 
 const home = document.querySelector('#home');
 const player = document.querySelector('#play');
@@ -45,6 +45,17 @@ function showView() {
 
   syncGameView();
 }
+
+launch.addEventListener('click', (event) => {
+  if (!handheld.matches || !document.fullscreenEnabled || event.button !== 0 ||
+      event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+
+  event.preventDefault();
+  location.hash = launch.hash;
+  showView();
+  // Fullscreen needs to start in the Play or Resume click handler.
+  toggleFullscreen({ quiet: true });
+});
 
 window.addEventListener('hashchange', showView);
 showView();
