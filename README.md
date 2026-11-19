@@ -2,6 +2,8 @@
 
 This repository contains the native WebAssembly (WASM) port of Pokémon FireRed Version (English Rev 1 / 1.1), compiling the decompiled C source code from `pret/pokefirered` directly into WebAssembly instructions using LLVM Clang and `wasm-ld`.
 
+This is an unofficial browser port. The original game was developed by Game Freak and decompiled by [pret contributors](https://github.com/pret/pokefirered).
+
 ## Architecture Overview
 
 Unlike traditional web emulators (e.g., mGBA or VBA-M compiled to WASM) which emulate an ARM7TDMI processor and execute a ROM file, this project:

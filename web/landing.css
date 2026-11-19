@@ -291,17 +291,12 @@
 
 .landing-footer {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px 24px;
-  flex-wrap: wrap;
+  justify-content: flex-end;
   padding-block: 20px 25px;
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 13px;
 }
-.landing-footer p { margin: 0; }
-.landing .landing-footer p a { text-decoration: underline; text-underline-offset: 3px; }
 .landing-footer > a { font-weight: 650; }
 
 @media (prefers-reduced-motion: no-preference) {
