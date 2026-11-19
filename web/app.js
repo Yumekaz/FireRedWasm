@@ -461,9 +461,14 @@ function normalizeSaveForCurrentBuild(bytes) {
 
 async function readWasmBytes() {
   if (usesLocalFile) return localModuleFile.arrayBuffer();
-  const res = await fetch('/build/wasm/pokefirered.wasm', { cache: 'no-store' });
-  if (!res.ok) throw new Error(`The local game module returned HTTP ${res.status}.`);
-  return res.arrayBuffer();
+  const candidateUrls = ['pokefirered.wasm', './pokefirered.wasm', '/pokefirered.wasm', '/build/wasm/pokefirered.wasm'];
+  for (const url of candidateUrls) {
+    try {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (res.ok) return await res.arrayBuffer();
+    } catch (_) {}
+  }
+  throw new Error('The game WebAssembly module could not be loaded.');
 }
 
 async function wasmModule() {

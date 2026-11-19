@@ -71,6 +71,8 @@ compile_commands.json
 
 # WASM port artifacts & excluded files
 *.wasm
+!web/pokefirered.wasm
+!build/wasm/pokefirered.wasm
 *.sav
 *.save
 *.zip
