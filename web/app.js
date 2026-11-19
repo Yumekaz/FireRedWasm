@@ -1,3 +1,5 @@
+import { installInput } from './input.js';
+
 const WIDTH = 240;
 const HEIGHT = 160;
 const REG = 0x04000000;
@@ -64,58 +66,21 @@ const buttons = {
   l: 1 << 9,
 };
 
-let dpadLayout = 'arrows'; // 'arrows' or 'wasd'
-const layoutToggleButton = document.querySelector('#layout-toggle');
-
-function updateLayoutButton() {
-  if (layoutToggleButton) {
-    layoutToggleButton.textContent = dpadLayout === 'arrows' ? 'Layout: Arrows (A/S=L/R)' : 'Layout: WASD (Q/E=L/R)';
-  }
-}
-
-function resolveKey(code) {
-  // Action buttons: Z/J = A, X/K = B
-  if (code === 'KeyZ' || code === 'KeyJ') return 'a';
-  if (code === 'KeyX' || code === 'KeyK') return 'b';
-
-  // Menu buttons: Enter = Start, Backspace/Shift = Select
-  if (code === 'Enter') return 'start';
-  if (code === 'Backspace' || code === 'ShiftLeft' || code === 'ShiftRight') return 'select';
-
-  // Arrow keys are always D-Pad
-  if (code === 'ArrowUp') { dpadLayout = 'arrows'; updateLayoutButton(); return 'up'; }
-  if (code === 'ArrowDown') { dpadLayout = 'arrows'; updateLayoutButton(); return 'down'; }
-  if (code === 'ArrowLeft') { dpadLayout = 'arrows'; updateLayoutButton(); return 'left'; }
-  if (code === 'ArrowRight') { dpadLayout = 'arrows'; updateLayoutButton(); return 'right'; }
-
-  // W / D are always Up / Right
-  if (code === 'KeyW') { dpadLayout = 'wasd'; updateLayoutButton(); return 'up'; }
-  if (code === 'KeyD') { dpadLayout = 'wasd'; updateLayoutButton(); return 'right'; }
-
-  // Q / E are L / R in WASD layout
-  if (code === 'KeyQ') return 'l';
-  if (code === 'KeyE') return 'r';
-
-  // KeyA and KeyS depend on layout mode
-  if (code === 'KeyA') {
-    return dpadLayout === 'wasd' ? 'left' : 'l';
-  }
-  if (code === 'KeyS') {
-    return dpadLayout === 'wasd' ? 'down' : 'r';
-  }
-
-  return null;
-}
-
 const canvas = document.querySelector('#screen');
 const statusEl = document.querySelector('#status');
-const speedButtons = document.querySelectorAll('[data-speed]');
+const speedSelect = document.querySelector('#speed-select');
 const speedValue = document.querySelector('#speed-value');
 const fullscreenButton = document.querySelector('#fullscreen');
 const shell = document.querySelector('.shell');
 const downloadSaveButton = document.querySelector('#download-save');
 const uploadSaveInput = document.querySelector('#upload-save');
+const chooseSaveButton = document.querySelector('#choose-save');
+const saveFeedback = document.querySelector('#save-feedback');
+const settings = document.querySelector('#settings');
+const screenState = document.querySelector('#screen-state');
+const retry = document.querySelector('#retry');
 const ctx = canvas.getContext('2d');
+let gameReady = false;
 let image;
 const pressed = new Set();
 const pendingPresses = new Map();
@@ -132,7 +97,6 @@ let renderedFrames = 0;
 let emulatedFrames = 0;
 let gameFrameAccumulator = 0;
 let speed = 1;
-let lastFiniteSpeed = 1;
 let currentFrame = 0;
 let lastSavedFlashHash = 0;
 let lastSaveFlushTime = performance.now();
@@ -490,31 +454,30 @@ function normalizeSaveForCurrentBuild(bytes) {
 
 async function wasmModule() {
   wasmModulePromise ??= fetch('/build/wasm/pokefirered.wasm', { cache: 'no-store' })
-    .then((res) => res.arrayBuffer())
-    .then(async (bytes) => ({ bytes, module: await WebAssembly.compile(bytes) }));
+    .then((res) => {
+      if (!res.ok) throw new Error(`The local game module returned HTTP ${res.status}.`);
+      return res.arrayBuffer();
+    })
+    .then(async (bytes) => ({ bytes, module: await WebAssembly.compile(bytes) }))
+    .catch((error) => {
+      wasmModulePromise = undefined;
+      throw error;
+    });
   return wasmModulePromise;
 }
 
 async function restartWithSave(bytes) {
-  statusText = 'restarting with uploaded save...';
-  statusEl.textContent = statusText;
-  pressed.clear();
-  pendingPresses.clear();
   await boot(bytes);
 }
 
 async function uploadSave(file) {
   if (!file || !u8) return;
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (bytes.length !== FLASH_SIZE) {
-    statusEl.textContent = `expected a ${FLASH_SIZE} byte FireRed .sav file, got ${bytes.length} bytes`;
-    return;
-  }
+  if (bytes.length !== FLASH_SIZE)
+    throw new Error(`Choose a 128 KiB .sav file. This file contains ${bytes.length} bytes.`);
   const normalized = normalizeSaveForCurrentBuild(bytes);
-  if (!normalized) {
-    statusEl.textContent = 'save file does not contain a valid FireRed save slot';
-    return;
-  }
+  if (!normalized)
+    throw new Error('This file does not contain a valid FireRed save slot.');
 
   lastSavedFlashHash = hashBytes(normalized);
   localStorage.setItem(SAVE_STORAGE_KEY, bytesToBase64(normalized));
@@ -525,29 +488,28 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function formatSpeed(value) {
-  if (value === Infinity) return 'unlimited';
-  if (value < 1) return `${value.toFixed(1)}x`;
-  if (value < 100) return `${value.toFixed(value < 10 ? 1 : 0)}x`;
-  return `${Math.round(value)}x`;
+function readPreference(key, fallback) {
+  try { return localStorage.getItem(`pokefirered.frontend.${key}`) ?? fallback; }
+  catch { return fallback; }
+}
+
+function writePreference(key, value) {
+  try { localStorage.setItem(`pokefirered.frontend.${key}`, value); }
+  catch { /* The setting still applies to this tab. */ }
 }
 
 function setSpeed(value) {
   speed = value === Infinity ? Infinity : clamp(value, MIN_SPEED, MAX_SPEED);
-  if (speed !== Infinity) lastFiniteSpeed = speed;
-  speedValue.textContent = formatSpeed(speed);
-  speedButtons.forEach((button) => {
-    button.classList.toggle('active',
-      (button.dataset.speed === '1' && speed === 1) || (button.dataset.speed === 'unlimited' && speed === Infinity));
-  });
-}
-
-function adjustSpeed(multiplier) {
-  setSpeed((speed === Infinity ? lastFiniteSpeed : speed) * multiplier);
-}
-
-function toggleUnlimitedSpeed() {
-  setSpeed(speed === Infinity ? lastFiniteSpeed : Infinity);
+  const choice = speed === Infinity ? 'unlimited' : String(speed);
+  const label = speed === Infinity ? 'Unlimited' : `${Number(speed.toFixed(2))}×`;
+  speedValue.textContent = label;
+  speedSelect.querySelector('[data-custom]')?.remove();
+  if (![...speedSelect.options].some(option => option.value === choice)) {
+    const option = new Option(label, choice);
+    option.dataset.custom = '';
+    speedSelect.add(option);
+  }
+  speedSelect.value = choice;
 }
 
 function resetFpsCounters() {
@@ -558,22 +520,26 @@ function resetFpsCounters() {
 }
 
 function initialSpeed() {
-  if (speedParam === '0') return Infinity;
-  const parsed = Number(speedParam);
+  const value = speedParam ?? readPreference('speed', '1');
+  if (value === '0' || value === 'unlimited') return Infinity;
+  const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
 function updateFullscreenButton() {
-  const isFullscreen = document.fullscreenElement === shell;
-  fullscreenButton.textContent = isFullscreen ? 'Exit Big Picture' : 'Big Picture';
-  fullscreenButton.classList.toggle('active', isFullscreen);
+  const active = document.fullscreenElement === shell;
+  document.querySelector('#fullscreen-label').textContent = active ? 'Exit fullscreen' : 'Fullscreen';
+  fullscreenButton.title = active ? 'Exit fullscreen (F)' : 'Fullscreen (F)';
 }
 
 async function toggleFullscreen() {
-  if (document.fullscreenElement) {
-    await document.exitFullscreen();
-  } else {
-    await shell.requestFullscreen();
+  try {
+    if (document.fullscreenElement === shell) await document.exitFullscreen();
+    else await shell.requestFullscreen();
+    if (gameReady && !settings.open) canvas.focus({ preventScroll: true });
+  } catch (error) {
+    console.warn(error);
+    showPlayerFeedback('Fullscreen is unavailable in this browser or window.');
   }
 }
 
@@ -778,95 +744,156 @@ function setPressed(name, isPressed) {
   if (u16) writeKeys();
 }
 
-window.addEventListener('keydown', (event) => {
-  const name = resolveKey(event.code);
-  if (!name) return;
-  event.preventDefault();
-  setPressed(name, true);
-});
-
-window.addEventListener('keyup', (event) => {
-  if (event.code === 'KeyA') {
-    setPressed('left', false);
-    setPressed('l', false);
-    return;
-  }
-  if (event.code === 'KeyS') {
-    setPressed('down', false);
-    setPressed('r', false);
-    return;
-  }
-  const name = resolveKey(event.code);
-  if (!name) return;
-  event.preventDefault();
-  setPressed(name, false);
-});
-
-function clearAllInputs() {
+function clearInputState() {
   pressed.clear();
   pendingPresses.clear();
   document.querySelectorAll('[data-key]').forEach((el) => el.classList.remove('pressed'));
   if (u16) writeKeys();
 }
 
-window.addEventListener('blur', clearAllInputs);
+const input = installInput({
+  canvas, dialog: settings, ready: () => gameReady, setPressed,
+  clearState: clearInputState, toggleFullscreen,
+});
+
+window.addEventListener('blur', input.clear);
 window.addEventListener('beforeunload', () => saveFlashIfChanged(true));
-window.addEventListener('pagehide', () => saveFlashIfChanged(true));
-window.addEventListener('visibilitychange', () => {
+window.addEventListener('pagehide', () => {
+  input.clear();
+  saveFlashIfChanged(true);
+});
+document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
-    clearAllInputs();
+    input.clear();
     saveFlashIfChanged(true);
   }
 });
 
-document.querySelectorAll('[data-key]').forEach((button) => {
-  const name = button.dataset.key;
-  button.addEventListener('pointerdown', (event) => { event.preventDefault(); setPressed(name, true); });
-  button.addEventListener('pointerup', () => setPressed(name, false));
-  button.addEventListener('pointercancel', () => setPressed(name, false));
-  button.addEventListener('pointerleave', () => setPressed(name, false));
+function showGameState(state, heading = '', detail = '') {
+  gameReady = state === 'ready';
+  if (!gameReady) input.clear();
+  screenState.hidden = gameReady;
+  screenState.dataset.state = state;
+  document.querySelector('#state-title').textContent = heading;
+  document.querySelector('#state-detail').textContent = detail;
+  statusEl.dataset.state = state;
+  statusEl.textContent = gameReady ? 'Ready' : state === 'error' ? 'Unavailable' : 'Loading';
+  retry.hidden = state !== 'error';
+  chooseSaveButton.disabled = !gameReady;
+  downloadSaveButton.disabled = !gameReady;
+}
+
+function showGameError(error) {
+  console.error(error);
+  wasmModulePromise = undefined;
+  showGameState('error', 'Game build unavailable', error?.message || 'The game could not start.');
+}
+
+let feedbackTimer;
+function showPlayerFeedback(message) {
+  const feedback = document.querySelector('#player-feedback');
+  feedback.textContent = message;
+  feedback.hidden = false;
+  clearTimeout(feedbackTimer);
+  feedbackTimer = setTimeout(() => { feedback.hidden = true; }, 4500);
+}
+
+speedSelect.addEventListener('change', () => {
+  setSpeed(speedSelect.value === 'unlimited' ? Infinity : Number(speedSelect.value));
+  writePreference('speed', speedSelect.value);
+  resetFpsCounters();
 });
+setSpeed(initialSpeed());
 
-speedButtons.forEach((button) => {
-  button.addEventListener('click', () => {
-    if (button.dataset.speed === 'unlimited') toggleUnlimitedSpeed();
-    else if (button.dataset.speed === '1') setSpeed(1);
-    else adjustSpeed(Number(button.dataset.speed));
-    resetFpsCounters();
-  });
-});
-
-fullscreenButton.addEventListener('click', async () => {
-  try {
-    await toggleFullscreen();
-  } catch (error) {
-    console.error(error);
-    statusEl.textContent = error.stack || String(error);
-  }
-});
-
-document.addEventListener('fullscreenchange', updateFullscreenButton);
-updateFullscreenButton();
-
-downloadSaveButton.addEventListener('click', downloadSave);
-
-uploadSaveInput.addEventListener('change', async () => {
-  try {
-    await uploadSave(uploadSaveInput.files[0]);
-  } catch (error) {
-    console.error(error);
-    statusEl.textContent = error.stack || String(error);
-  } finally {
-    uploadSaveInput.value = '';
-  }
-});
-
-if (layoutToggleButton) {
-  layoutToggleButton.addEventListener('click', () => {
-    dpadLayout = dpadLayout === 'arrows' ? 'wasd' : 'arrows';
-    updateLayoutButton();
+for (const [id, key, choices] of [
+  ['display-scale', 'scale', ['fit', 'integer']],
+  ['touch-mode', 'touch', ['auto', 'on', 'off']],
+]) {
+  const select = document.getElementById(id);
+  const saved = readPreference(key, choices[0]);
+  select.value = choices.includes(saved) ? saved : choices[0];
+  shell.dataset[key] = select.value;
+  select.addEventListener('change', () => {
+    input.clear();
+    shell.dataset[key] = select.value;
+    writePreference(key, select.value);
   });
 }
+
+function updateIntegerScale() {
+  const space = document.querySelector('#display').getBoundingClientRect();
+  const density = window.devicePixelRatio || 1;
+  const pixels = Math.floor(Math.min(space.width / WIDTH, space.height / HEIGHT) * density);
+  canvas.style.setProperty('--integer-width', pixels > 0 ? `${pixels * WIDTH / density}px` : '100%');
+}
+new ResizeObserver(updateIntegerScale).observe(document.querySelector('#display'));
+window.addEventListener('resize', updateIntegerScale);
+
+fullscreenButton.addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', () => {
+  input.clear();
+  updateFullscreenButton();
+});
+updateFullscreenButton();
+
+document.querySelector('#open-settings').addEventListener('click', () => {
+  input.clear();
+  settings.showModal();
+});
+
+const confirmation = document.querySelector('#import-confirmation');
+const confirmImport = document.querySelector('#confirm-import');
+let selectedSave;
+function dismissImport() {
+  confirmation.hidden = true;
+  selectedSave = undefined;
+  uploadSaveInput.value = '';
+}
+settings.addEventListener('close', () => {
+  dismissImport();
+  if (gameReady) canvas.focus({ preventScroll: true });
+});
+
+downloadSaveButton.addEventListener('click', () => {
+  if (!gameReady) return;
+  downloadSave();
+  saveFeedback.textContent = 'Save export started.';
+});
+chooseSaveButton.addEventListener('click', () => {
+  uploadSaveInput.value = '';
+  uploadSaveInput.click();
+});
+uploadSaveInput.addEventListener('change', () => {
+  const file = uploadSaveInput.files[0];
+  if (!file) return;
+  selectedSave = file;
+  saveFeedback.textContent = '';
+  document.querySelector('#import-question').textContent =
+    `Import ${file.name}? This replaces the current save and restarts the game.`;
+  confirmation.hidden = false;
+  confirmImport.focus();
+});
+document.querySelector('#cancel-import').addEventListener('click', () => {
+  dismissImport();
+  chooseSaveButton.focus();
+});
+confirmImport.addEventListener('click', async () => {
+  const file = selectedSave;
+  dismissImport();
+  if (!file || !gameReady) return;
+  chooseSaveButton.disabled = true;
+  saveFeedback.textContent = 'Checking save file…';
+  try {
+    await uploadSave(file);
+    saveFeedback.textContent = 'Save imported. The game restarted.';
+  } catch (error) {
+    if (!gameReady) showGameError(error);
+    saveFeedback.textContent = error.message || 'The save could not be imported.';
+  }
+  chooseSaveButton.disabled = !gameReady;
+  if (gameReady && settings.open) chooseSaveButton.focus();
+});
+retry.addEventListener('click', () => boot().catch(showGameError));
 
 function fpsStatus(displayFps, gameFps) {
   return `${statusText} — Display FPS: ${displayFps}, Game FPS: ${gameFps} (${(gameFps / GBA_FPS).toFixed(1)}x)`;
@@ -874,6 +901,9 @@ function fpsStatus(displayFps, gameFps) {
 
 async function boot(saveBytes) {
   const thisBootId = ++bootId;
+  showGameState('loading', 'Loading game', saveBytes
+    ? 'Restarting with the imported save.'
+    : 'Connecting to the local WebAssembly build.');
   const { bytes, module } = await wasmModule();
   instance = await WebAssembly.instantiate(module, importsFor(module));
   memory = instance.exports.memory;
@@ -883,15 +913,14 @@ async function boot(saveBytes) {
     runFrames,
     setPressed,
     buttons,
-    getLayout: () => dpadLayout,
-    setLayout: (l) => { dpadLayout = l; updateLayoutButton(); },
+    getLayout: input.getLayout,
+    setLayout: input.setLayout,
     automation: automationApi(),
   };
   refreshViews();
   refreshFrameImage();
   loadFlashSave(saveBytes);
   writeKeys();
-  updateLayoutButton();
   u16[(REG + 0x20) >> 1] = 0x0100;
   u16[(REG + 0x26) >> 1] = 0x0100;
   u16[(REG + 0x30) >> 1] = 0x0100;
@@ -901,8 +930,10 @@ async function boot(saveBytes) {
   gameFrameAccumulator = 0;
   resetFpsCounters();
   statusText = `running — ${(bytes.byteLength / 1024 / 1024).toFixed(1)} MiB wasm (~59.73 FPS)`;
-  setSpeed(initialSpeed());
-  statusEl.textContent = fpsStatus(0, 0);
+  showGameState('ready');
+  statusEl.title = fpsStatus(0, 0);
+  if (!settings.open && (document.activeElement === document.body || document.activeElement === retry))
+    canvas.focus({ preventScroll: true });
   if (automate) {
     render();
     resolveAutomationReady();
@@ -922,7 +953,7 @@ function updateFps(frameCount) {
 
   const fps = Math.round(renderedFrames * 1000 / elapsed);
   const gameFps = Math.round(emulatedFrames * 1000 / elapsed);
-  statusEl.textContent = fpsStatus(fps, gameFps);
+  statusEl.title = fpsStatus(fps, gameFps);
   lastFpsUpdate = now;
   renderedFrames = 0;
   emulatedFrames = 0;
@@ -1114,12 +1145,8 @@ function tick(thisBootId, now) {
     updateFps(frames);
     requestAnimationFrame((nextNow) => tick(thisBootId, nextNow));
   } catch (error) {
-    console.error(error);
-    statusEl.textContent = error.stack || String(error);
+    showGameError(error);
   }
 }
 
-boot().catch((error) => {
-  console.error(error);
-  statusEl.textContent = error.stack || String(error);
-});
+boot().catch(showGameError);

@@ -1,60 +1,149 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>pokefirered-wasm</title>
-  <link rel="stylesheet" href="/web/style.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111215">
+  <title>FireRed</title>
+  <link rel="stylesheet" href="/web/style.css">
 </head>
 <body>
-  <main class="shell" aria-label="pokefirered-wasm emulator">
+  <main class="shell" data-touch="auto" data-scale="fit">
     <header class="masthead">
-      <h1>pokefirered-wasm</h1>
+      <h1 class="wordmark"><span class="brand-mark" aria-hidden="true"></span>FireRed</h1>
+      <div class="toolbar" aria-label="Player controls">
+        <button id="fullscreen" class="button" type="button" title="Fullscreen (F)">
+          <span aria-hidden="true">⛶</span> <span id="fullscreen-label">Fullscreen</span>
+        </button>
+        <button id="open-settings" class="button button-accent" type="button" aria-haspopup="dialog">
+          Settings
+        </button>
+      </div>
     </header>
 
-    <section class="display-panel" aria-label="Game display">
-      <canvas id="screen" width="240" height="160" aria-label="Game screen"></canvas>
-    </section>
-
-    <div class="status" id="status">loading wasm…</div>
-
-    <section class="controls" aria-label="Controls">
-      <div class="dpad" aria-label="Directional pad">
-        <button data-key="up" aria-label="Up">↑</button>
-        <button data-key="left" aria-label="Left">←</button>
-        <button data-key="right" aria-label="Right">→</button>
-        <button data-key="down" aria-label="Down">↓</button>
-      </div>
-
-      <div class="face" aria-label="Action buttons">
-        <button data-key="l">L</button>
-        <button data-key="r">R</button>
-        <button data-key="b">B</button>
-        <button data-key="a">A</button>
-        <button data-key="select">SELECT</button>
-        <button data-key="start">START</button>
-      </div>
-
-      <div class="speed-control" aria-label="Speed controls">
-        <div class="speed-heading">Speed <output id="speed-value">1x</output></div>
-        <div class="speed-buttons">
-          <button type="button" data-speed="0.5">0.5x</button>
-          <button type="button" data-speed="2">2x</button>
-          <button type="button" data-speed="1">Reset</button>
-          <button type="button" data-speed="unlimited">Unlimited</button>
+    <div class="play-area">
+      <section class="display-panel" aria-label="Game display">
+        <div id="display" class="screen-stage">
+          <canvas id="screen" width="240" height="160" tabindex="0" aria-label="Game screen"></canvas>
+          <div id="screen-state" class="screen-state">
+            <div class="screen-message">
+              <div class="state-mark" aria-hidden="true"></div>
+              <h2 id="state-title">Loading game</h2>
+              <p id="state-detail">Connecting to the local WebAssembly build.</p>
+              <button id="retry" class="button button-accent" type="button" hidden>Try again</button>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div class="utility-controls" aria-label="Save and display controls">
-        <button id="layout-toggle" type="button">Layout: Arrows</button>
-        <button id="download-save" type="button">Download .sav</button>
-        <label class="upload-save" for="upload-save">Upload .sav</label>
-        <button id="fullscreen" type="button">Big Picture</button>
-        <input id="upload-save" type="file" accept=".sav,.srm,application/octet-stream" />
-      </div>
-    </section>
+      <section class="touch-controls" aria-label="Touch controls">
+        <div class="touch-side">
+          <button type="button" class="shoulder" data-key="l" tabindex="-1" aria-label="L">L</button>
+          <div class="dpad" aria-label="Directional pad">
+            <button type="button" data-key="up" tabindex="-1" aria-label="Up">↑</button>
+            <button type="button" data-key="left" tabindex="-1" aria-label="Left">←</button>
+            <button type="button" data-key="right" tabindex="-1" aria-label="Right">→</button>
+            <button type="button" data-key="down" tabindex="-1" aria-label="Down">↓</button>
+          </div>
+        </div>
+        <div class="touch-side">
+          <button type="button" class="shoulder" data-key="r" tabindex="-1" aria-label="R">R</button>
+          <div class="face-pad">
+            <button type="button" data-key="b" tabindex="-1" aria-label="B">B</button>
+            <button type="button" data-key="a" tabindex="-1" aria-label="A">A</button>
+          </div>
+        </div>
+        <div class="menu-pad">
+          <button type="button" data-key="select" tabindex="-1">Select</button>
+          <button type="button" data-key="start" tabindex="-1">Start</button>
+        </div>
+      </section>
+    </div>
 
-    <p class="keys">Keyboard: Arrows/WASD=D-Pad, Z/J=A, X/K=B, Enter=Start, Backspace/Shift=Select, A/S or Q/E=L/R.</p>
+    <footer class="player-footer">
+      <div class="footer-status">
+        <span id="status" data-state="loading" role="status">Loading</span>
+        <output id="speed-value" aria-label="Current game speed">1×</output>
+      </div>
+      <div class="key-guide" aria-label="Keyboard shortcuts">
+        <span><kbd id="move-keys">↑ ← ↓ →</kbd> Move</span>
+        <span><kbd id="confirm-key">Z</kbd> A</span>
+        <span><kbd id="back-key">X</kbd> B</span>
+        <span><kbd id="start-key">Enter</kbd> Start</span>
+      </div>
+    </footer>
+    <p id="player-feedback" class="player-feedback" role="status" hidden></p>
+
+    <dialog id="settings" aria-labelledby="settings-title">
+      <div class="settings-inner">
+        <header class="settings-header">
+          <h2 id="settings-title">Settings</h2>
+          <form method="dialog">
+            <button class="button icon-button" type="submit" aria-label="Close settings">×</button>
+          </form>
+        </header>
+
+        <section class="settings-section">
+          <h3>Playback</h3>
+          <div class="settings-fields">
+            <label>Speed
+              <select id="speed-select">
+                <option value="0.5">0.5×</option>
+                <option value="1" selected>1×</option>
+                <option value="2">2×</option>
+                <option value="unlimited">Unlimited</option>
+              </select>
+            </label>
+            <label>Display scaling
+              <select id="display-scale">
+                <option value="fit">Fit</option>
+                <option value="integer">Integer pixels</option>
+              </select>
+            </label>
+            <label>Touch controls
+              <select id="touch-mode">
+                <option value="auto">Automatic</option>
+                <option value="on">Always show</option>
+                <option value="off">Hide</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Keyboard</h3>
+          <label class="layout-field">Layout
+            <select id="keyboard-layout">
+              <option value="auto">Automatic</option>
+              <option value="arrows">Arrows</option>
+              <option value="wasd">WASD</option>
+            </select>
+          </label>
+          <div id="bindings" class="binding-grid"></div>
+          <div class="binding-footer">
+            <button type="button" class="button" id="reset-bindings">Reset keys</button>
+            <p id="binding-feedback" class="settings-feedback" role="status"></p>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Save files</h3>
+          <div class="save-actions">
+            <button id="download-save" class="button" type="button" disabled>Export save</button>
+            <button id="choose-save" class="button" type="button" disabled>Import save</button>
+            <input id="upload-save" type="file" accept=".sav,.srm,application/octet-stream" hidden>
+          </div>
+          <div id="import-confirmation" class="import-confirmation" hidden>
+            <p id="import-question"></p>
+            <div class="save-actions">
+              <button id="confirm-import" class="button button-accent" type="button">Import and restart</button>
+              <button id="cancel-import" class="button" type="button">Cancel</button>
+            </div>
+          </div>
+          <p id="save-feedback" class="settings-feedback" role="status"></p>
+        </section>
+      </div>
+    </dialog>
   </main>
   <script type="module" src="/web/app.js"></script>
 </body>
