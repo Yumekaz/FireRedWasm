@@ -8,6 +8,7 @@
 /web/*
 !/web/index.html
 !/web/app.js
+!/web/audio.js
 !/web/input.js
 !/web/landing.js
 !/web/landing.css

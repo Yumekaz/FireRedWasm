@@ -464,6 +464,52 @@ console.log('[PASS] Zero affine matrix correctly collapses to reference texel wi
 u16[0x04000020 >> 1] = 0x0100;
 u16[0x04000026 >> 1] = 0x0100;
 
+
+console.log('\n--- Test 8: Native audio output ---');
+const sound = instance.exports;
+const constants = fs.readFileSync('include/constants/songs.h', 'utf8');
+function songId(name) {
+  const match = constants.match(new RegExp('#define ' + name + '\\s+(0x[0-9a-fA-F]+|[0-9]+)'));
+  if (!match) throw new Error('Missing song ' + name);
+  return Number(match[1]);
+}
+sound.AgbMain();
+for (const name of ['MUS_TITLE', 'MUS_PALLET', 'SE_SELECT']) {
+  sound.m4aMPlayAllStop();
+  sound.m4aSongNumStart(songId(name));
+  let energy = 0, count = 0, peak = 0;
+  for (let frame = 0; frame < 180; frame++) {
+    sound.WasmAudioClear();
+    sound.m4aSoundMain();
+    const data = new Float32Array(memoryRef.current.buffer, sound.WasmAudioBuffer(), sound.WasmAudioFrames() * 2);
+    for (const sample of data) {
+      if (!Number.isFinite(sample)) throw new Error('Non-finite audio');
+      energy += sample * sample;
+      peak = Math.max(peak, Math.abs(sample));
+      count++;
+    }
+  }
+  if (energy < .01) throw new Error(name + ' is silent');
+  console.log('[PASS]', name, 'RMS', Math.sqrt(energy / count).toFixed(4), 'peak', peak.toFixed(4));
+}
+sound.m4aMPlayAllStop();
+sound.WasmAudioClear();
+sound.m4aSoundMain();
+const silence = new Float32Array(memoryRef.current.buffer, sound.WasmAudioBuffer(), sound.WasmAudioFrames() * 2);
+if (silence.some(sample => sample !== 0)) throw new Error('Stop leaves audible voices');
+if (sound.WasmAudioUnknownCommands() !== 0) throw new Error('Unsupported commands: ' + sound.WasmAudioUnknownCommands());
+console.log('[PASS] Stop silences all voices and tested songs use supported sequence commands');
+sound.SetPokemonCryTone(sound.gCryTable.value);
+let cryEnergy = 0;
+for (let frame = 0; frame < 120; frame++) {
+  sound.WasmAudioClear();
+  sound.m4aSoundMain();
+  const samples = new Float32Array(memoryRef.current.buffer, sound.WasmAudioBuffer(), sound.WasmAudioFrames() * 2);
+  for (const sample of samples) cryEnergy += sample * sample;
+}
+if (cryEnergy < .01) throw new Error('Pokemon cry is silent');
+console.log('[PASS] Pokemon cry generates PCM audio');
+
 console.log('\n====================================');
 console.log(' All WebAssembly Tests PASSED!      ');
 console.log('====================================');

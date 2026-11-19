@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 
 const output = new URL('../build/vercel-site/', import.meta.url);
 const source = new URL('../web/', import.meta.url);
-const assets = ['app.js', 'input.js', 'landing.js', 'landing.css', 'mobile.css', 'style.css'];
+const assets = ['app.js', 'audio.js', 'input.js', 'landing.js', 'landing.css', 'mobile.css', 'style.css'];
 
 const html = await readFile(new URL('index.html', source), 'utf8');
 

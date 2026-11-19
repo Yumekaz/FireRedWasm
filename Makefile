@@ -220,6 +220,12 @@ WASM_DATA_ASM_SRCS := \
 	$(DATA_ASM_SUBDIR)/battle_ai_scripts.s \
 	$(DATA_ASM_SUBDIR)/battle_anim_scripts.s
 WASM_DATA_OBJS := $(patsubst $(DATA_ASM_SUBDIR)/%.s,$(WASM_OBJ_DIR)/%.o,$(WASM_DATA_ASM_SRCS))
+WASM_DATA_OBJS += $(WASM_OBJ_DIR)/audio.o
+
+$(WASM_OBJ_DIR)/audio.o: tools/generate_wasm_audio.py tools/generate_wasm_sound.py tools/wasm_asm_data.py sound/MPlayDef.s sound/voice_groups.inc sound/direct_sound_data.inc sound/song_table.inc sound/cry_tables.inc sound/keysplit_tables.inc asm/macros/music_voice.inc $(MID_SRCS) $(wildcard sound/direct_sound_samples/*.wav sound/direct_sound_samples/cries/*.wav sound/programmable_wave_samples/*.pcm) | $(TOOLS_DIR)/mid2agb $(TOOLS_DIR)/wav2agb
+	@mkdir -p $(WASM_OBJ_DIR)
+	python3 tools/generate_wasm_audio.py
+	$(WASM_CC) --target=wasm32-unknown-unknown -c $(WASM_BUILD_DIR)/audio/audio.wasm.s -o $@
 
 wasm: generated wasm-assets $(WASM)
 
@@ -233,6 +239,8 @@ $(WASM_SOUND_HEADER): tools/generate_wasm_sound.py sound/song_table.inc sound/so
 $(WASM_C_OBJS): | generated wasm-assets
 
 $(WASM_OBJ_DIR)/m4a.o: $(WASM_SOUND_HEADER)
+$(WASM_OBJ_DIR)/m4a.o: src/wasm_audio.inc.c
+$(WASM_OBJ_DIR)/m4a.o: WASM_OPT_FLAGS := -O2
 
 $(WASM): Makefile $(WASM_C_OBJS) $(WASM_DATA_OBJS)
 	@mkdir -p $(dir $@)

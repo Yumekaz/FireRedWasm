@@ -176,6 +176,11 @@
 
         <section class="settings-section">
           <h3>Playback</h3>
+          <label class="layout-field" for="audio-volume">Volume
+            <input id="audio-volume" type="range" min="0" max="100" value="70">
+          </label>
+          <p class="settings-feedback">Audio follows game speed up to 2×. Faster modes are silent.</p>
+          <p id="audio-feedback" class="settings-feedback" role="status"></p>
           <div class="settings-fields">
             <label>Speed
               <select id="speed-select">

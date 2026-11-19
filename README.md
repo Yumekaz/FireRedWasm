@@ -56,6 +56,8 @@ Run `node tools/build_vercel.mjs` to prepare the same static output locally.
 
 Open **Settings** for WASD, custom keybindings, touch controls, playback speed, and integer pixel scaling. **Home** pauses the current session, and **Resume Game** picks up where you left off.
 
+Music, sound effects, and Pokémon cries are rendered by the native WASM audio mixer using the project's song and sample data. Use **Settings → Volume** to adjust or mute playback. Sound starts after interacting with the player and follows game speed up to 2×. The mixer is an initial implementation, with simplified hardware envelopes and no reverb.
+
 Use the in-game **Save** command to keep progress in this browser. To back up or transfer it, export a `.sav` from **Settings**. Importing a compatible 128 KiB save replaces the current save and restarts the game.
 
 ## Project layout

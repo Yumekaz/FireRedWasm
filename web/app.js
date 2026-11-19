@@ -1,4 +1,5 @@
 import { installInput } from './input.js';
+import { installAudio } from './audio.js';
 
 const WIDTH = 240;
 const HEIGHT = 160;
@@ -84,6 +85,7 @@ const retry = document.querySelector('#retry');
 const chooseModule = document.querySelector('#choose-module');
 const moduleInput = document.querySelector('#module-file');
 const ctx = canvas.getContext('2d');
+const audio = installAudio();
 let gameReady = false;
 let image;
 const pressed = new Set();
@@ -794,6 +796,7 @@ window.addEventListener('pagehide', () => {
   saveFlashIfChanged(true);
 });
 document.addEventListener('visibilitychange', () => {
+  audio.setActive(!shell.hidden && document.visibilityState !== 'hidden');
   if (document.visibilityState === 'hidden') {
     input.clear();
     saveFlashIfChanged(true);
@@ -956,6 +959,7 @@ async function boot(saveBytes) {
   const { bytes, module } = await wasmModule();
   instance = await WebAssembly.instantiate(module, importsFor(module));
   memory = instance.exports.memory;
+  audio.attach(instance, memory);
   window.pokefirered = {
     instance,
     memory,
@@ -1010,6 +1014,7 @@ function runFrames(frameCount, keyMask = 0) {
     if (keyMask) u16[KEYINPUT >> 1] = KEY_MASK ^ keyMask;
     else writeKeys();
     instance.exports.WasmRunFrame();
+    audio.flush(speed);
     currentFrame++;
     stepPendingPresses();
   }
@@ -1197,6 +1202,7 @@ function tick(thisBootId, now) {
 }
 
 export function syncGameView() {
+  audio.setActive(!shell.hidden && document.visibilityState !== 'hidden');
   if (shell.hidden) {
     input.clear();
     cancelAnimationFrame(nextFrame);
