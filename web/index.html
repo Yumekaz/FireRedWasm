@@ -41,7 +41,7 @@
             <div class="preview-idle" aria-hidden="true">
               <span class="brand-mark preview-flame"></span>
             </div>
-            <img id="preview-image" src="/screenshots/12_pallet_town_outside.png"
+            <img id="preview-image" data-src="/screenshots/12_pallet_town_outside.png"
               width="240" height="160" decoding="async"
               alt="The player outside their house in Pallet Town" hidden>
           </div>
@@ -120,6 +120,8 @@
               <h2 id="state-title">Loading game</h2>
               <p id="state-detail">Connecting to the local WebAssembly build.</p>
               <button id="retry" class="button button-accent" type="button" hidden>Try again</button>
+              <button id="choose-module" class="button button-accent" type="button" hidden>Choose WASM file</button>
+              <input id="module-file" type="file" accept=".wasm,application/wasm" hidden>
             </div>
           </div>
         </div>

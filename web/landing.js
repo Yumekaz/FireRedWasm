@@ -1,4 +1,4 @@
-import { handheld, syncGameView, toggleFullscreen } from './app.js';
+import { handheld, syncGameView, toggleFullscreen, usesLocalFile } from './app.js';
 
 const home = document.querySelector('#home');
 const player = document.querySelector('#play');
@@ -13,8 +13,10 @@ function showPreview() {
   document.querySelector('#preview-caption').hidden = false;
 }
 
-if (preview.naturalWidth) showPreview();
-else preview.addEventListener('load', showPreview, { once: true });
+if (!usesLocalFile) {
+  preview.addEventListener('load', showPreview, { once: true });
+  preview.src = preview.dataset.src;
+}
 
 function showView() {
   const hash = location.hash;
@@ -26,7 +28,7 @@ function showView() {
 
   if (playing) {
     window.scrollTo(0, 0);
-    const target = status.dataset.state === 'error' ? document.querySelector('#retry') : canvas;
+    const target = player.querySelector('#screen-state:not([hidden]) button:not([hidden])') ?? canvas;
     target.focus({ preventScroll: true });
   } else {
     player.querySelector('dialog[open]')?.close();

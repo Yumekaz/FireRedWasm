@@ -48,6 +48,7 @@ const searchParams = new URLSearchParams(location.search);
 const speedParam = searchParams.get('speed');
 const automate = searchParams.get('automate') === '1';
 export const handheld = matchMedia('(pointer: coarse) and (hover: none)');
+export const usesLocalFile = document.body.dataset.runtime === 'local-file';
 const MIN_SPEED = 0.1;
 const MAX_SPEED = 1000;
 const FAST_FRAME_BUDGET_MS = 16;
@@ -80,6 +81,8 @@ const saveFeedback = document.querySelector('#save-feedback');
 const settings = document.querySelector('#settings');
 const screenState = document.querySelector('#screen-state');
 const retry = document.querySelector('#retry');
+const chooseModule = document.querySelector('#choose-module');
+const moduleInput = document.querySelector('#module-file');
 const ctx = canvas.getContext('2d');
 let gameReady = false;
 let image;
@@ -102,6 +105,7 @@ let currentFrame = 0;
 let lastSavedFlashHash = 0;
 let lastSaveFlushTime = performance.now();
 let wasmModulePromise;
+let localModuleFile;
 let bootId = 0;
 let started = false;
 let nextFrame;
@@ -455,12 +459,15 @@ function normalizeSaveForCurrentBuild(bytes) {
   return null;
 }
 
+async function readWasmBytes() {
+  if (usesLocalFile) return localModuleFile.arrayBuffer();
+  const res = await fetch('/build/wasm/pokefirered.wasm', { cache: 'no-store' });
+  if (!res.ok) throw new Error(`The local game module returned HTTP ${res.status}.`);
+  return res.arrayBuffer();
+}
+
 async function wasmModule() {
-  wasmModulePromise ??= fetch('/build/wasm/pokefirered.wasm', { cache: 'no-store' })
-    .then((res) => {
-      if (!res.ok) throw new Error(`The local game module returned HTTP ${res.status}.`);
-      return res.arrayBuffer();
-    })
+  wasmModulePromise ??= readWasmBytes()
     .then(async (bytes) => ({ bytes, module: await WebAssembly.compile(bytes) }))
     .catch((error) => {
       wasmModulePromise = undefined;
@@ -796,8 +803,10 @@ function showGameState(state, heading = '', detail = '') {
   document.querySelector('#state-title').textContent = heading;
   document.querySelector('#state-detail').textContent = detail;
   statusEl.dataset.state = state;
-  statusEl.textContent = gameReady ? 'Ready' : state === 'error' ? 'Unavailable' : 'Loading';
-  retry.hidden = state !== 'error';
+  const stateLabels = { ready: 'Ready', error: 'Unavailable', file: 'Game file needed', loading: 'Loading' };
+  statusEl.textContent = stateLabels[state];
+  retry.hidden = usesLocalFile || state !== 'error';
+  chooseModule.hidden = !usesLocalFile || (state !== 'file' && state !== 'error');
   chooseSaveButton.disabled = !gameReady;
   downloadSaveButton.disabled = !gameReady;
 }
@@ -805,8 +814,12 @@ function showGameState(state, heading = '', detail = '') {
 function showGameError(error) {
   console.error(error);
   wasmModulePromise = undefined;
-  showGameState('error', 'Game build unavailable', error?.message || 'The game could not start.');
-  if (!shell.hidden && document.activeElement === canvas) retry.focus({ preventScroll: true });
+  const detail = usesLocalFile ? 'Choose a compatible pokefirered.wasm from this project’s local build.'
+    : error?.message || 'The game could not start.';
+  showGameState('error', 'Game build unavailable', detail);
+  if (!shell.hidden && (document.activeElement === canvas || document.activeElement === document.body)) {
+    (usesLocalFile ? chooseModule : retry).focus({ preventScroll: true });
+  }
 }
 
 let feedbackTimer;
@@ -914,6 +927,15 @@ confirmImport.addEventListener('click', async () => {
   if (gameReady && settings.open) chooseSaveButton.focus();
 });
 retry.addEventListener('click', () => boot().catch(showGameError));
+chooseModule.addEventListener('click', () => moduleInput.click());
+moduleInput.addEventListener('change', () => {
+  const file = moduleInput.files[0];
+  moduleInput.value = '';
+  if (!file) return;
+  localModuleFile = file;
+  wasmModulePromise = undefined;
+  boot().catch(showGameError);
+});
 
 function fpsStatus(displayFps, gameFps) {
   return `${statusText} — Display FPS: ${displayFps}, Game FPS: ${gameFps} (${(gameFps / GBA_FPS).toFixed(1)}x)`;
@@ -925,7 +947,7 @@ async function boot(saveBytes) {
   nextFrame = undefined;
   showGameState('loading', 'Loading game', saveBytes
     ? 'Restarting with the imported save.'
-    : 'Connecting to the local WebAssembly build.');
+    : usesLocalFile ? 'Opening the selected WebAssembly file.' : 'Connecting to the local WebAssembly build.');
   const { bytes, module } = await wasmModule();
   instance = await WebAssembly.instantiate(module, importsFor(module));
   memory = instance.exports.memory;
@@ -1179,7 +1201,12 @@ export function syncGameView() {
 
   if (!started) {
     started = true;
-    boot().catch(showGameError);
+    if (usesLocalFile) {
+      showGameState('file', 'Choose your game build', 'Open the pokefirered.wasm file from your local build. It stays on this device.');
+      chooseModule.focus({ preventScroll: true });
+    } else {
+      boot().catch(showGameError);
+    }
     return;
   }
 

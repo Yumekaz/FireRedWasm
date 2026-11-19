@@ -1,0 +1,15 @@
+/*
+!/.vercelignore
+!/vercel.json
+!/tools/
+/tools/*
+!/tools/build_vercel.mjs
+!/web/
+/web/*
+!/web/index.html
+!/web/app.js
+!/web/input.js
+!/web/landing.js
+!/web/landing.css
+!/web/mobile.css
+!/web/style.css
